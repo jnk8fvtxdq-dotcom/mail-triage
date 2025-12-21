@@ -1,0 +1,148 @@
+# MailTriage Configuration
+# All classification rules in one file
+
+# ============================================
+# ACTION KEYWORDS
+# Emails containing these → Action note
+# ============================================
+
+[ACTION_KEYWORDS]
+swissport, aspire, lounge, airport lounge, priority pass, sbp, millar, Jagtar, David, fmorier, franbort
+
+# ============================================
+# ACTION CRITERIA
+# Personal emails requiring response
+# ============================================
+
+[ACTION]
+- Personal email from known contact with firstname.lastname@company format
+- Subject contains "Re:" or "RE:" indicating ongoing conversation
+- Email from @ehl.ch domain (school/work)
+- Email asks a question or expects a response
+- Contains SBP project keywords (swissport, millar, lounge, etc.)
+- Written by a real person, not automated system
+
+# ============================================
+# INFORMATION CRITERIA
+# Status updates and quality news worth noting
+# ============================================
+
+[INFORMATION]
+- Confirmation of something YOU initiated (job application, order, form submission)
+- Order confirmation or purchase receipt you want to track
+- Refund or return status updates
+- Course completion or certificate confirmation
+- Quality news from: Reuters, L'Agefi, Bloomberg
+- Transactional updates about YOUR actions (not marketing)
+
+# ============================================
+# IGNORE CRITERIA
+# Everything else - do not save
+# ============================================
+
+[IGNORE]
+- ALL emails from @linkedin.com (any subdomain)
+- Emails from @marketing.*.com addresses
+- Subject with emojis + discount/promo/code keywords
+- Requests to rate, review, or give feedback on service
+- Survey or satisfaction questionnaires
+- Flight reminders ("your departure is soon") - you know your schedule
+- App feature announcements or newsletters
+- Bank security tips or generic newsletters
+- System notifications (login links, "you used X service")
+- Promotional emails, sales, limited time offers
+- Connection requests, social media notifications
+
+# ============================================
+# DOMAIN RULES (strict)
+# ============================================
+
+[DOMAINS]
+IGNORE: linkedin.com, marketing.easyjet.com, operational.easyjet.com
+INFORMATION: thomsonreuters.com, agefi.com
+ACTION: ehl.ch
+
+# ============================================
+# CLASSIFICATION EXAMPLES
+# These examples teach the classifier
+# ============================================
+
+[EXAMPLES]
+
+## ACTION Examples
+
+EXAMPLE_1:
+From: Fergus Boyd <fergus@ipdividual.com>
+Subject: Re: interview
+Classification: ACTION
+Reason: Personal email from named contact, "Re:" indicates conversation, discussing meeting scheduling
+
+EXAMPLE_2:
+From: MILLAR Ian <Ian.MILLAR@ehl.ch>
+Subject: RE: Research Report SBP Team 34
+Classification: ACTION
+Reason: From @ehl.ch (trusted), "RE:" indicates reply, asks "Did you reach out to fergus?"
+
+## INFORMATION Examples
+
+EXAMPLE_3:
+From: no-reply@us.greenhouse-mail.io
+Subject: Thank you for applying to Anthropic
+Classification: INFORMATION
+Reason: Confirms job application YOU submitted, want to track application status
+
+EXAMPLE_4:
+From: dailybriefing@thomsonreuters.com
+Subject: Plotting Syrian uprisings… from Russia
+Classification: INFORMATION
+Reason: Reuters daily briefing - quality news source you subscribe to
+
+EXAMPLE_5:
+From: donotreply@easyjet.com
+Subject: easyJet booking reference: KB3JZG7
+Classification: INFORMATION
+Reason: Refund status update for YOUR booking, want to track refund progress
+
+EXAMPLE_6:
+From: service@myprotein.com
+Subject: Thank you for your order
+Classification: INFORMATION
+Reason: Order confirmation for purchase YOU made, want to track delivery
+
+## IGNORE Examples
+
+EXAMPLE_7:
+From: invitations@linkedin.com
+Subject: Eliott, start a conversation with your new connection, Darian
+Classification: IGNORE
+Reason: LinkedIn notification - ALWAYS ignore all LinkedIn emails
+
+EXAMPLE_8:
+From: service.client@monsieurchaussure.com
+Subject: Votre code promo du dimanche 🎁
+Classification: IGNORE
+Reason: Promotional email with emoji and "promo code" - marketing
+
+EXAMPLE_9:
+From: donotreply@operational.easyjet.com
+Subject: Votre réservation KB3JZG7: parlez-nous de votre expérience
+Classification: IGNORE
+Reason: Asking for review/feedback - you don't want to spend time on this
+
+EXAMPLE_10:
+From: donotreply@marketing.easyjet.com
+Subject: Votre réservation KB3JZG7: le départ pour Genève approche
+Classification: IGNORE
+Reason: Flight reminder - you know your schedule, don't need reminders
+
+# ============================================
+# RULES
+# ============================================
+
+[RULES]
+- When in doubt, choose IGNORE (60% of emails should be ignored)
+- ALL LinkedIn emails are IGNORE, no exceptions
+- Order confirmations are INFORMATION only if from the purchase, not marketing
+- "Re:" or "RE:" from a real person = likely ACTION
+- Promotional emails with emojis = IGNORE
+- If they ask you to rate/review = IGNORE

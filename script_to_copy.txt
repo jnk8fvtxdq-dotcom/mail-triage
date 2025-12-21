@@ -1,0 +1,277 @@
+using terms from application "Mail"
+
+    on perform mail action with messages theMessages for rule theRule
+        -- Configuration
+        set projectFolder to (POSIX path of (path to home folder)) & "Claude Code/MailTriage/"
+        set pythonPath to "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3"
+        set cacheFolder to projectFolder & "cache/"
+        set logPath to projectFolder & "logs/triage.log"
+        set processedFile to projectFolder & "cache/processed_threads.txt"
+
+        -- Ensure cache folder exists
+        do shell script "mkdir -p " & quoted form of cacheFolder
+        do shell script "touch " & quoted form of processedFile
+
+        repeat with aMessage in theMessages
+            try
+                -- Extract email data
+                set msgSubject to subject of aMessage
+                set msgSender to sender of aMessage
+                set msgContent to content of aMessage
+                set msgDate to date received of aMessage
+                set msgId to message id of aMessage
+
+                -- Normalize subject (remove Re:, RE:, Fwd:, FW: etc) for thread detection
+                set normalizedSubject to my normalizeSubject(msgSubject)
+
+                -- Check if this thread was already processed
+                set alreadyProcessed to my isThreadProcessed(normalizedSubject, processedFile)
+                if alreadyProcessed then
+                    my logMessage("SKIP: Thread already processed - " & normalizedSubject, logPath)
+                else
+                    -- Mark thread as processed
+                    my markThreadProcessed(normalizedSubject, processedFile)
+
+                    -- Truncate long content
+                    if (length of msgContent) > 2000 then
+                        set msgContent to text 1 thru 2000 of msgContent
+                    end if
+
+                    -- Format date as DD.MM.YYYY
+                    set dateString to my formatDate(msgDate)
+
+                    -- Build JSON payload
+                    set jsonPayload to my buildJSON(msgSubject, msgSender, dateString, msgContent, msgId)
+
+                    -- Create unique temp file (timestamp + random)
+                    set tempFile to cacheFolder & "email_" & (do shell script "date +%s") & "_" & (random number from 1000 to 9999) & ".json"
+                    do shell script "echo " & quoted form of jsonPayload & " > " & quoted form of tempFile
+
+                    -- Call Python classifier with timeout
+                    set pythonResult to do shell script pythonPath & " " & quoted form of (projectFolder & "classifier.py") & " " & quoted form of tempFile & " 2>&1"
+
+                    -- Process result
+                    my processResult(pythonResult, logPath)
+
+                    -- Cleanup
+                    do shell script "rm -f " & quoted form of tempFile
+                end if
+
+            on error errMsg
+                my logMessage("ERROR: " & errMsg, logPath)
+            end try
+        end repeat
+    end perform mail action with messages
+
+    -- Normalize subject by removing Re:, RE:, Fwd:, FW: prefixes
+    on normalizeSubject(subj)
+        set normalizedSubj to subj
+        -- Remove common reply/forward prefixes (case insensitive workaround)
+        set prefixes to {"Re: ", "RE: ", "re: ", "Re:", "RE:", "re:", "Fwd: ", "FWD: ", "fwd: ", "Fwd:", "FWD:", "fwd:", "Fw: ", "FW: ", "fw: ", "Fw:", "FW:", "fw:", "Tr: ", "TR: ", "tr: ", "Tr:", "TR:", "tr:"}
+        repeat
+            set foundPrefix to false
+            repeat with prefix in prefixes
+                if normalizedSubj starts with prefix then
+                    set normalizedSubj to text ((length of prefix) + 1) thru -1 of normalizedSubj
+                    set foundPrefix to true
+                    exit repeat
+                end if
+            end repeat
+            if not foundPrefix then exit repeat
+        end repeat
+        -- Trim whitespace
+        repeat while normalizedSubj starts with " "
+            set normalizedSubj to text 2 thru -1 of normalizedSubj
+        end repeat
+        return normalizedSubj
+    end normalizeSubject
+
+    -- Check if thread was already processed (within last 24 hours)
+    on isThreadProcessed(normalizedSubject, processedFile)
+        try
+            -- Read processed threads file
+            set fileContent to do shell script "cat " & quoted form of processedFile & " 2>/dev/null || echo ''"
+            if fileContent contains normalizedSubject then
+                return true
+            end if
+        end try
+        return false
+    end isThreadProcessed
+
+    -- Mark thread as processed
+    on markThreadProcessed(normalizedSubject, processedFile)
+        try
+            -- Add to processed file (keep last 100 entries to avoid file growing forever)
+            do shell script "echo " & quoted form of normalizedSubject & " >> " & quoted form of processedFile
+            do shell script "tail -100 " & quoted form of processedFile & " > " & quoted form of processedFile & ".tmp && mv " & quoted form of processedFile & ".tmp " & quoted form of processedFile
+        end try
+    end markThreadProcessed
+
+    -- Format date as DD.MM.YYYY
+    on formatDate(theDate)
+        set d to day of theDate
+        set m to (month of theDate as integer)
+        set y to year of theDate
+        if d < 10 then set d to "0" & d
+        if m < 10 then set m to "0" & m
+        return (d as string) & "." & (m as string) & "." & (y as string)
+    end formatDate
+
+    -- Build JSON string with proper escaping
+    on buildJSON(subj, sender, dateStr, content, msgId)
+        set subj to my escapeJSON(subj)
+        set sender to my escapeJSON(sender)
+        set content to my escapeJSON(content)
+        set msgId to my escapeJSON(msgId)
+        return "{\"subject\":\"" & subj & "\",\"sender\":\"" & sender & "\",\"date\":\"" & dateStr & "\",\"content\":\"" & content & "\",\"messageId\":\"" & msgId & "\"}"
+    end buildJSON
+
+    -- Escape special characters for JSON
+    on escapeJSON(theText)
+        set theText to my replaceText(theText, "\\", "\\\\")
+        set theText to my replaceText(theText, "\"", "\\\"")
+        set theText to my replaceText(theText, return, " ")
+        set theText to my replaceText(theText, linefeed, " ")
+        set theText to my replaceText(theText, tab, " ")
+        set theText to my replaceText(theText, ASCII character 8, "") -- backspace
+        set theText to my replaceText(theText, ASCII character 12, "") -- form feed
+        return theText
+    end escapeJSON
+
+    -- String replace helper
+    on replaceText(theText, searchStr, replaceStr)
+        set AppleScript's text item delimiters to searchStr
+        set theItems to text items of theText
+        set AppleScript's text item delimiters to replaceStr
+        set theText to theItems as string
+        set AppleScript's text item delimiters to ""
+        return theText
+    end replaceText
+
+    -- URL encode for message:// links
+    on urlEncode(theText)
+        set theText to my replaceText(theText, "%", "%25")
+        set theText to my replaceText(theText, " ", "%20")
+        set theText to my replaceText(theText, "@", "%40")
+        set theText to my replaceText(theText, "#", "%23")
+        set theText to my replaceText(theText, "&", "%26")
+        set theText to my replaceText(theText, "=", "%3D")
+        set theText to my replaceText(theText, "+", "%2B")
+        set theText to my replaceText(theText, "/", "%2F")
+        set theText to my replaceText(theText, "?", "%3F")
+        return theText
+    end urlEncode
+
+    -- Process classification result
+    on processResult(jsonResult, logPath)
+        try
+            set theAction to my extractValue(jsonResult, "action")
+            set theSummary to my extractValue(jsonResult, "summary")
+            set theDate to my extractValue(jsonResult, "date")
+            set theSender to my extractValue(jsonResult, "sender")
+            set theMessageId to my extractValue(jsonResult, "messageId")
+
+            my logMessage("Parsed: action=" & theAction & ", date=" & theDate, logPath)
+
+            -- Build mail link (bare URL for auto-linking)
+            set cleanId to theMessageId
+            if cleanId starts with "<" then set cleanId to text 2 thru -1 of cleanId
+            if cleanId ends with ">" then set cleanId to text 1 thru -2 of cleanId
+            set encodedId to my urlEncode(cleanId)
+            set mailLink to "message://%3C" & encodedId & "%3E"
+
+            -- Save ALL emails to their respective notes
+            if theAction is "action" then
+                my logMessage("Updating Action note...", logPath)
+                my updateNote("Action", theDate, theSender, theSummary, mailLink)
+                my logMessage("Action note updated", logPath)
+                delay 0.5
+            else if theAction is "information" then
+                my logMessage("Updating Information note...", logPath)
+                my updateNote("Information", theDate, theSender, theSummary, mailLink)
+                my logMessage("Information note updated", logPath)
+                delay 0.5
+            else if theAction is "ignore" then
+                my logMessage("Updating Ignore note...", logPath)
+                my updateNote("Ignore", theDate, theSender, theSummary, mailLink)
+                my logMessage("Ignore note updated", logPath)
+                delay 0.5
+            end if
+
+        on error errMsg
+            my logMessage("Process error: " & errMsg, logPath)
+        end try
+    end processResult
+
+    -- Extract value from compact JSON (no spaces after colons)
+    on extractValue(jsonStr, keyName)
+        set searchPattern to "\"" & keyName & "\":\""
+        set startPos to offset of searchPattern in jsonStr
+        if startPos = 0 then return ""
+
+        set valueStart to startPos + (length of searchPattern)
+        set remaining to text valueStart thru -1 of jsonStr
+        set endPos to offset of "\"" in remaining
+        if endPos = 0 then return ""
+
+        return text 1 thru (endPos - 1) of remaining
+    end extractValue
+
+    -- Update or create note in Notes app with clickable link
+    on updateNote(noteName, dateStr, senderStr, summaryText, mailLink)
+        tell application "Notes"
+            -- Ensure Mail folder exists
+            if not (exists folder "Mail") then
+                make new folder with properties {name:"Mail"}
+            end if
+            set mailFolder to folder "Mail"
+
+            -- Find or create note
+            set targetNote to missing value
+            try
+                set targetNote to first note of mailFolder whose name is noteName
+            end try
+
+            -- Build entry with full clickable link
+            set newEntry to "<p>" & dateStr & " - " & senderStr & "</p><p>" & summaryText & "</p><p><a href=\"" & mailLink & "\">" & mailLink & "</a></p><br>"
+
+            if targetNote is missing value then
+                -- Create new note
+                make new note at mailFolder with properties {body:noteName & "<hr>" & newEntry}
+            else
+                -- Prepend new entry to existing note
+                set currentBody to body of targetNote
+
+                set hrPatterns to {"<hr>", "<hr/>", "<hr />", "<HR>", "<HR/>", "<HR />"}
+                set foundHR to false
+                set markerPos to 0
+                set hrLen to 0
+
+                repeat with hrPattern in hrPatterns
+                    if currentBody contains hrPattern then
+                        set markerPos to offset of hrPattern in currentBody
+                        set foundHR to true
+                        set hrLen to length of hrPattern
+                        exit repeat
+                    end if
+                end repeat
+
+                if foundHR then
+                    set titlePart to text 1 thru (markerPos - 1) of currentBody
+                    set existingEntries to text (markerPos + hrLen) thru -1 of currentBody
+                    set body of targetNote to titlePart & "<hr>" & newEntry & existingEntries
+                else
+                    set body of targetNote to currentBody & "<hr>" & newEntry
+                end if
+            end if
+        end tell
+    end updateNote
+
+    -- Log message with timestamp
+    on logMessage(msg, logPath)
+        try
+            do shell script "echo \"$(date '+%Y-%m-%d %H:%M:%S') " & msg & "\" >> " & quoted form of logPath
+        end try
+    end logMessage
+
+end using terms from
