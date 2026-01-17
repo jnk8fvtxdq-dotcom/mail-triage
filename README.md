@@ -13,7 +13,7 @@ Classified emails are automatically summarized and saved to Apple Notes for easy
 
 ## Demo
 
-https://github.com/jnk8fvtxdq-dotcom/mail-triage/assets/video.mp4
+https://github.com/jnk8fvtxdq-dotcom/mail-triage/raw/refs/heads/main/video.mp4
 
 *Watch the complete workflow: email arrives → Claude AI classification → Apple Notes summary*
 
