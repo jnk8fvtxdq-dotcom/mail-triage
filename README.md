@@ -11,6 +11,12 @@ MailTriage monitors your Apple Mail inbox and uses AI to classify emails into th
 
 Classified emails are automatically summarized and saved to Apple Notes for easy reference.
 
+## Demo
+
+https://github.com/jnk8fvtxdq-dotcom/mail-triage/assets/video.mp4
+
+*Watch the complete workflow: email arrives → Claude AI classification → Apple Notes summary*
+
 ## Architecture
 
 ```
@@ -36,7 +42,7 @@ Classified emails are automatically summarized and saved to Apple Notes for easy
 
 ## Tech Stack
 
-- **Python 3.14** - Core classification engine
+- **Python 3.11+** - Core classification engine
 - **Anthropic Claude API** (Sonnet 4) - AI-powered email analysis
 - **AppleScript** - Mail.app and Notes.app integration
 - **macOS Mail Rules** - Automatic triggering on new emails
@@ -52,8 +58,8 @@ Classified emails are automatically summarized and saved to Apple Notes for easy
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/mailtriage.git
-   cd mailtriage
+   git clone https://github.com/jnk8fvtxdq-dotcom/mail-triage.git
+   cd mail-triage
    ```
 
 2. Install dependencies:
